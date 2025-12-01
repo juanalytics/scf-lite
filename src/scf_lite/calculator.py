@@ -1,42 +1,64 @@
 """
-Main SCF calculation logic.
+Módulo principal para ejecutar cálculos SCF usando PySCF
 """
 
+from typing import List, Dict, Any
 from pyscf import gto, scf
 
 
-def calculate_h2o_energy():
+def calculate_scf(
+    symbols: List[str],
+    coordinates: List[List[float]],
+    charge: int = 0,
+    spin: int = 0,
+    basis: str = "sto-3g"
+) -> Dict[str, Any]:
     """
-    Minimal working example: Calculate energy for H₂O molecule.
-    Hardcoded geometry and parameters.
+    Ejecuta un cálculo SCF (RHF o UHF según corresponda).
+    
+    Args:
+        symbols: Lista de símbolos químicos
+        coordinates: Lista de coordenadas 3D en Angstrom
+        charge: Carga total
+        spin: Spin total (0 = singlete/RHF, != 0 = UHF)
+        basis: Base a usar
     
     Returns:
-        float: Electronic energy in Hartree
+        Dict con los resultados del cálculo
     """
-    # Build H₂O molecule (hardcoded)
-    # Geometry: O at origin, two H atoms
-    # O-H distance ~0.957 Å, H-O-H angle ~104.5°
-    mol = gto.Mole()
-    mol.atom = '''
-    O  0.000000  0.000000  0.000000
-    H  0.957000  0.000000  0.000000
-    H -0.240000  0.927000  0.000000
-    '''
-    mol.basis = '6-31g'
-    mol.charge = 0
-    mol.spin = 0  # singlet (multiplicity = 1)
-    mol.build()
+    # Construir la cadena de átomos para PySCF
+    atom_string = []
+    for symbol, coord in zip(symbols, coordinates):
+        atom_string.append(f"{symbol} {coord[0]} {coord[1]} {coord[2]}")
     
-    # Run Hartree-Fock calculation
-    mf = scf.RHF(mol)
-    energy = mf.kernel()
+    # Crear objeto molecular
+    mol = gto.M(
+        atom=atom_string,
+        basis=basis,
+        charge=charge,
+        spin=spin
+    )
     
-    return energy
-
-
-if __name__ == "__main__":
-    # Test the minimal example
-    print("Running minimal H₂O calculation...")
-    energy = calculate_h2o_energy()
-    print(f"Energy: {energy:.6f} Hartree")
-    print(f"Energy: {energy * 27.2114:.4f} eV")
+    # Elegir método SCF según el spin
+    if spin == 0:
+        mf = scf.RHF(mol)
+    else:
+        mf = scf.UHF(mol)
+    
+    # Ejecutar cálculo
+    energia = mf.kernel()
+    
+    # Recopilar resultados
+    resultados = {
+        "energia": float(energia),
+        "convergio": mf.converged,
+        "iteraciones": mf.scf_summary.get("niter", 0),
+        "metodo": "RHF" if spin == 0 else "UHF",
+        "spin": spin,
+        "charge": charge,
+        "basis": basis,
+        "natom": mol.natm,
+        "nelec": mol.nelec
+    }
+    
+    return resultados
