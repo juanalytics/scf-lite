@@ -1,0 +1,11 @@
+{
+  "symbols": ["H", "H"],
+  "coordinates": [
+    [0.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0]
+  ],
+  "charge": 1,
+  "spin": 1,
+  "basis": "sto-3g"
+}
+
