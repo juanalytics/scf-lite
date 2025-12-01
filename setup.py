@@ -19,6 +19,7 @@ setup(
     python_requires=">=3.9",
     install_requires=[
         "pyscf>=2.0.0",
+        "matplotlib>=3.0.0",
     ],
     entry_points={
         "console_scripts": [

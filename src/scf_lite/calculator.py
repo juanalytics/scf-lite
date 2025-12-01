@@ -47,15 +47,23 @@ def calculate_scf(
     else:
         mf = scf.UHF(mol)
 
+    # Contador de iteraciones usando callback
+    iter_count = 0
+
+    def _count_iterations(envs):
+        nonlocal iter_count
+        # Se llama una vez por ciclo SCF
+        iter_count += 1
+
+    mf.callback = _count_iterations
+
     # Ejecutar cálculo con medición de tiempo
     t0 = time.perf_counter()
     energia = mf.kernel()
     t1 = time.perf_counter()
 
-    # Recuperar número de iteraciones si PySCF lo expone
-    n_iter = getattr(mf, "iterations", None)
-    if n_iter is None:
-        n_iter = mf.scf_summary.get("niter", 0)
+    # Recuperar número de iteraciones
+    n_iter = iter_count or mf.scf_summary.get("niter", 0)
 
     # Recopilar resultados
     resultados: Dict[str, Any] = {
