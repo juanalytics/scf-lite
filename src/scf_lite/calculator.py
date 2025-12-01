@@ -2,7 +2,9 @@
 Módulo principal para ejecutar cálculos SCF usando PySCF
 """
 
+import time
 from typing import List, Dict, Any
+
 from pyscf import gto, scf
 
 
@@ -15,14 +17,14 @@ def calculate_scf(
 ) -> Dict[str, Any]:
     """
     Ejecuta un cálculo SCF (RHF o UHF según corresponda).
-    
+
     Args:
         symbols: Lista de símbolos químicos
         coordinates: Lista de coordenadas 3D en Angstrom
         charge: Carga total
         spin: Spin total (0 = singlete/RHF, != 0 = UHF)
         basis: Base a usar
-    
+
     Returns:
         Dict con los resultados del cálculo
     """
@@ -30,35 +32,47 @@ def calculate_scf(
     atom_string = []
     for symbol, coord in zip(symbols, coordinates):
         atom_string.append(f"{symbol} {coord[0]} {coord[1]} {coord[2]}")
-    
+
     # Crear objeto molecular
     mol = gto.M(
         atom=atom_string,
         basis=basis,
         charge=charge,
-        spin=spin
+        spin=spin,
     )
-    
+
     # Elegir método SCF según el spin
     if spin == 0:
         mf = scf.RHF(mol)
     else:
         mf = scf.UHF(mol)
-    
-    # Ejecutar cálculo
+
+    # Ejecutar cálculo con medición de tiempo
+    t0 = time.perf_counter()
     energia = mf.kernel()
-    
+    t1 = time.perf_counter()
+
+    # Recuperar número de iteraciones si PySCF lo expone
+    n_iter = getattr(mf, "iterations", None)
+    if n_iter is None:
+        n_iter = mf.scf_summary.get("niter", 0)
+
     # Recopilar resultados
-    resultados = {
+    resultados: Dict[str, Any] = {
         "energia": float(energia),
-        "convergio": mf.converged,
-        "iteraciones": mf.scf_summary.get("niter", 0),
+        "convergio": bool(mf.converged),
+        "iteraciones": int(n_iter),
         "metodo": "RHF" if spin == 0 else "UHF",
-        "spin": spin,
-        "charge": charge,
-        "basis": basis,
-        "natom": mol.natm,
-        "nelec": mol.nelec
+        "spin": int(spin),
+        "charge": int(charge),
+        "basis": str(basis),
+        "natom": int(mol.natm),
+        "nelec": tuple(int(x) for x in mol.nelec),
+        "tiempo_segundos": float(t1 - t0),
     }
-    
+
     return resultados
+
+
+
+
