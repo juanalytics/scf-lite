@@ -8,19 +8,31 @@ Sistema minimalista para cálculos SCF (Self-Consistent Field) usando PySCF.
 
 ### 1.1 Entorno recomendado
 
-1. Crear entorno virtual (recomendado):
+La forma más estable de usar PySCF en Windows es a través de **WSL + Ubuntu + conda**.
+
+1. Instalar WSL y Ubuntu (si aún no lo tienes):
 ```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+wsl --install -d Ubuntu
 ```
 
-2. Instalar dependencias:
+2. Abrir la terminal de Ubuntu (WSL) y crear un entorno con conda:
+```bash
+conda create -n scf-lite python=3.11 -y
+conda activate scf-lite
+```
+
+3. Ir al directorio del proyecto (tu repo de Windows está montado en `/mnt/c`):
+```bash
+cd /mnt/c/Users/tu_usuario/Documents/Repos/scf-lite
+```
+
+4. Instalar las dependencias del proyecto (incluye PySCF y matplotlib):
 ```bash
 pip install -r requirements.txt
 ```
 
-> Nota para Windows: PySCF se instala más fácilmente en Linux.  
-> Una opción cómoda es usar WSL (Ubuntu) y trabajar sobre el repo en `/mnt/c/...`.
+> Si prefieres no usar conda, también puedes usar `python -m venv venv` dentro de WSL
+> y luego `pip install -r requirements.txt`. El flujo del proyecto no cambia.
 
 ### 1.2 Librerías principales
 
@@ -59,29 +71,99 @@ python -m scf_lite.cli -f examples/water.json -o resultado.json
 
 ### 1.4 Escaneos y gráficas incorporadas
 
-La CLI incluye modos de escaneo con gráficos interactivos (requiere `matplotlib`):
+La CLI tiene **tres familias de modos**: cálculo rápido, escaneos predefinidos y
+escaneos basados en tu propia molécula.
 
-- **H₂ (enlace H–H):**
+#### 1.4.1 Cálculo rápido (modo por defecto)
+
+Si no pasas ninguna bandera de escaneo (`--scan-*`), la CLI:
+- Valida el input.  
+- Ejecuta **un solo cálculo SCF** con esa geometría.  
+- Imprime la salida con el formato elegido (`dict` o `json`).
+
+Flags relevantes:
+- `-f/--file PATH`: archivo `.json` o `.xyz` con la molécula.  
+- `-s/--symbols`: símbolos atómicos (si no se usa `-f`).  
+- `-c/--coordinates`: lista plana de coordenadas (si no se usa `-f`).  
+- `--charge`, `--spin`, `--basis`: sobreescriben los valores del archivo o ponen
+  defaults si vienes de CLI directa.  
+- `--format {dict,json}`: formato de salida en pantalla (por defecto `json`).  
+- `-o/--output FILE`: guarda la salida en un archivo JSON.
+
+Ejemplo:
+```bash
+python -m scf_lite.cli -f examples/co2.json --format json
+```
+
+#### 1.4.2 Escaneos predefinidos (no necesitan archivo)
+
+Estos modos generan internamente la molécula y las geometrías a escanear:
+
+- **`--scan-h2`** – escaneo del enlace H–H en H₂:
   ```bash
   python -m scf_lite.cli --scan-h2
   ```
+  - Usa una geometría estándar de H₂.  
+  - Escanea la distancia H–H.  
+  - Muestra:
+    - Tabla `R_HH`, `E`, `ΔE (kcal/mol)`, con el mínimo marcado.  
+    - Gráfica con puntos SCF, mínimo y ajuste tipo Morse.
 
-- **H₂O (un enlace O–H):**
+- **`--scan-oh`** – escaneo de un enlace O–H en H₂O:
   ```bash
   python -m scf_lite.cli --scan-oh
   ```
+  - Usa una geometría estándar de H₂O.  
+  - Escanea uno de los enlaces O–H manteniendo fijo el resto.  
+  - Muestra tabla y gráfica iguales al caso H₂, pero para O–H.
 
-- **Escaneo genérico de un enlace en tu propia molécula**  
-  (índices de átomos 1‑based):
+En estos dos casos **no necesitas** pasar `-f` ni `-s/-c`: la geometría está fija
+en el código.
+
+#### 1.4.3 Escaneo genérico de un enlace en tu molécula (`--scan-bond`)
+
+Este modo combina el cálculo rápido con los escaneos:
+
+```bash
+python -m scf_lite.cli -f examples/co2.json --scan-bond 1 2
+```
+
+Qué hace:
+- Carga tu molécula desde JSON/XYZ (o desde `-s/-c`).  
+- Valida símbolos, coordenadas, carga, spin y base.  
+- Interpreta `--scan-bond I J` con **índices 1‑based**:
+  - `I` y `J` son los números de átomo tal como aparecen en `symbols` / archivo.  
+  - Internamente se convierten a índices 0‑based.
+- Toma la distancia inicial entre los átomos `I` y `J` (\(R_0\)).  
+- Genera nuevas geometrías variando ese enlace entre \(0.7 R_0\) y \(1.3 R_0\),
+  dejando fijo el átomo `I` y moviendo `J` sobre la línea original.  
+- Para cada nueva geometría ejecuta un cálculo SCF (RHF o UHF según el `spin`).  
+- Después:
+  - Imprime una **tabla**:
+    - `R (Å)`, `E (Hartree)`, `ΔE (kcal/mol)`, y una marca `<-- mínimo` en el
+      punto de energía más baja.  
+  - Dibuja una **gráfica**:
+    - Puntos SCF.  
+    - Punto mínimo resaltado y línea vertical.  
+    - Curva suave ajustada tipo Morse (si el ajuste converge) con un recuadro
+      que muestra la ecuación y parámetros del potencial.
+
+Flags que intervienen en este modo:
+- `-f/--file`, `-s/--symbols`, `-c/--coordinates`, `--charge`, `--spin`, `--basis`  
+  → definen la molécula base.  
+- `--scan-bond I J`  
+  → define qué enlace se escanea (obligatorio en este modo).
+
+Ejemplos:
+
+- Escanear un enlace C–O en CO₂:
   ```bash
   python -m scf_lite.cli -f examples/co2.json --scan-bond 1 2
   ```
-  Esto usa la geometría del archivo, escanea la distancia entre los átomos 1 y 2
-  y muestra tabla + curva + ajuste tipo Morse.
-
-En todos los escaneos se muestra:
-- Una tabla con `R` (distancia), `E` (Hartree) y `ΔE` (kcal/mol), marcando el mínimo.  
-- Una gráfica con los puntos SCF, el mínimo y una curva ajustada tipo Morse.
+- Escanear un enlace N–H en NH₃ (desde XYZ):
+  ```bash
+  python -m scf_lite.cli -f examples/nh3.xyz --basis sto-3g --scan-bond 1 2
+  ```
 
 ### 1.5 Uso desde Python
 
@@ -220,10 +302,10 @@ La `energia` que devuelve SCF Lite es la energía total HF (incluye interacción
 electrón–electrón y repulsión núcleo–núcleo tal como la maneja PySCF), en
 **unidades de Hartree**:
 
-- \(1\ \text{Hartree} \approx 27.2\ \text{eV} \approx 627.5\ \text{kcal/mol}\).
+- 1 Hartree ≈ 27.2 eV ≈ 627.5 kcal/mol.
 
 Lo físicamente relevante suelen ser las **diferencias de energía**:
-- Al estirar un enlace, miramos \(\Delta E = E(R) - E_\text{min}\).  
+- Al estirar un enlace, miramos algo como ΔE = E(R) − E_min.  
 - En los escaneos se convierten estas diferencias a **kcal/mol** para una
   interpretación más química.
 
@@ -238,17 +320,15 @@ En los modos `--scan-h2`, `--scan-oh` y `--scan-bond`:
 2. Para cada distancia se ejecuta un cálculo HF independiente.  
 3. Se construye la curva **E(R)** con los puntos SCF.  
 4. Se busca el mínimo numérico → distancia de equilibrio aproximada.  
-5. Se ajusta (cuando es posible) un **potencial tipo Morse**:
+5. Se ajusta (cuando es posible) un **potencial tipo Morse**, de la forma:
 
-\[
-E(R) \approx E_0 + D_e \left(1 - e^{-a (R - R_e)}\right)^2
-\]
+> E(R) ≈ E₀ + Dₑ · (1 − exp[−a · (R − Rₑ)])²
 
 Donde:
-- \(R_e\): distancia de equilibrio.  
-- \(D_e\): profundidad del pozo (energía de enlace aproximada).  
-- \(a\): parámetro de rigidez del enlace.  
-- \(E_0\): energía de referencia a grandes distancias.
+- Rₑ: distancia de equilibrio.  
+- Dₑ: profundidad del pozo (energía de enlace aproximada).  
+- a: parámetro de rigidez del enlace.  
+- E₀: energía de referencia a grandes distancias.
 
 La gráfica muestra:
 - Puntos discretos SCF.  
